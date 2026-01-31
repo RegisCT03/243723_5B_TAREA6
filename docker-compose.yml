@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres123
-      POSTGRES_DB: actividad_db
+      POSTGRES_DB: db_LabReportes
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
