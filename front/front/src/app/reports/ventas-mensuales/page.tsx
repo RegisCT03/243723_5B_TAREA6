@@ -33,7 +33,7 @@ export default async function VentasMensuales({
       
       <section>
         <p>
-          Este reporte permite comparar el crecimiento mes a mes.
+          Este reporte permite comparar el crecimiento mes con mes.
         </p>
       </section>
 
