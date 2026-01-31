@@ -13,7 +13,7 @@ SELECT
     SUM(od.cantidad) AS unidades_vendidas,
     SUM(od.subtotal) AS ventas_totales,
     CASE 
-        WHEN SUM(od.subtotal) > 1000 THEN 'Producto Estrella'
+        WHEN SUM(od.subtotal) > 1000 OR (RANK() OVER (ORDER BY SUM(od.cantidad) DESC) <= 3 AND SUM(od.cantidad) >= 5) THEN 'Producto Estrella'
         ELSE 'Venta Regular'
     END AS categoria_exito,
     SUM(od.subtotal) / NULLIF(SUM(od.cantidad), 0) AS precio_promedio
