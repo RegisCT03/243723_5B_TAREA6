@@ -5,7 +5,7 @@ CREATE ROLE view_user WITH
     NOCREATEDB
     NOCREATEROLE
     NOINHERIT;
-GRANT CONNECT ON DATABASE db_LabReportes TO view_user;
+GRANT CONNECT ON DATABASE db_labreportes TO view_user;
 GRANT USAGE ON SCHEMA public TO view_user;
 --Permisos 
 GRANT SELECT ON 
@@ -17,4 +17,4 @@ GRANT SELECT ON
 TO view_user;
 --- Revocar permisos innecesarios
 REVOKE CREATE ON SCHEMA public FROM public;
-REVOKE ALL ON DATABASE db_LabReportes FROM public;
+REVOKE ALL ON DATABASE db_labreportes FROM public;
