@@ -1,32 +1,9 @@
-import { query } from '../../../../lib/db';
+export const dynamic = 'force-dynamic';
+import { getClientesFieles, ClienteValor } from '../../../../lib/services/clientes.service';
 import Link from 'next/link';
 
-interface ClienteValor {
-  cliente_id: number;
-  cliente_nombre: string;
-  ordenes_count: number;
-  gasto_total: number;
-  gasto_promedio: number;
-}
-
-export default async function ClientesRecurrentes({ 
-  searchParams 
-}: { 
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }> 
-}) {
-  await searchParams;
-  const res = await query(`
-    SELECT 
-      cliente_id, 
-      cliente_nombre, 
-      ordenes_count, 
-      gasto_total, 
-      gasto_promedio 
-    FROM vw_clientes_valor 
-    ORDER BY gasto_total DESC
-  `);
-  
-  const data: ClienteValor[] = res.rows;
+export default async function ClientesRecurrentes() {
+  const data = await getClientesFieles();
 
   return (
     <main className="min-h-screen bg-[#f4f1f1] p-8">
@@ -86,7 +63,7 @@ export default async function ClientesRecurrentes({
         </div>
 
         <footer className="mt-12 text-center text-gray-400 text-xs">
-          PostgreSQL Views
+          PostgreSQL Views | Data Layer Separated
         </footer>
       </div>
     </main>

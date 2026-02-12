@@ -1,13 +1,7 @@
-import { query } from '../../../../lib/db';
+export const dynamic = 'force-dynamic';
+import { getRankingVIP, RankingCliente } from '../../../../lib/services/ranking.service';
 import Link from 'next/link';
 import { z } from 'zod';
-
-interface RankingCliente {
-  ranking: number;
-  cliente_id: number;
-  cliente_nombre: string;
-  gasto_total: number;
-}
 
 const FilterSchema = z.object({
   minGasto: z.coerce.number().min(0).default(0),
@@ -21,13 +15,7 @@ export default async function RankingClientes({
   
   const resolvedParams = await searchParams;
   const { minGasto } = FilterSchema.parse(resolvedParams);
-
-  const res = await query(
-    'SELECT ranking, cliente_id, cliente_nombre, gasto_total FROM vw_ranking_clientes WHERE gasto_total >= $1 ORDER BY ranking ASC',
-    [minGasto]
-  );
-
-  const data: RankingCliente[] = res.rows;
+  const data = await getRankingVIP(minGasto);
 
   return (
     <main className="min-h-screen bg-[#f4f1f1] p-8">
@@ -50,7 +38,6 @@ export default async function RankingClientes({
           </p>
         </section>
 
-        {/* Filtro Estilizado */}
         <section className="mb-8 bg-white p-6 rounded-xl shadow-md border border-gray-200">
           <form method="GET" className="flex items-center gap-4">
             <div className="flex flex-col">
@@ -109,7 +96,7 @@ export default async function RankingClientes({
           )}
         </div>
         <footer className="mt-12 text-center text-gray-400 text-xs">
-          PostgreSQL Views
+          PostgreSQL Views | Advanced Analytics Layer
         </footer>
       </div>
     </main>

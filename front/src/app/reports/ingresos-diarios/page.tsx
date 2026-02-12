@@ -1,28 +1,9 @@
-import { query } from '../../../../lib/db';
+export const dynamic = 'force-dynamic';
+import { getIngresosAcumulados, IngresoAcumulado } from '../../../../lib/services/ingresos.service';
 import Link from 'next/link';
 
-interface IngresoAcumulado {
-  fecha: string;
-  ingresos_dia: number;
-  ingresos_acumulados: number;
-}
-
-export default async function IngresosDiarios({ 
-  searchParams 
-}: { 
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }> 
-}) {
-  await searchParams;
-  const res = await query(`
-    SELECT 
-      fecha, 
-      ingresos_dia, 
-      ingresos_acumulados 
-    FROM vw_ingresos_acumulados 
-    ORDER BY fecha DESC
-  `);
-
-  const data: IngresoAcumulado[] = res.rows;
+export default async function IngresosDiarios() {
+  const data = await getIngresosAcumulados();
 
   return (
     <main className="min-h-screen bg-[#f4f1f1] p-8">
@@ -84,7 +65,7 @@ export default async function IngresosDiarios({
         </div>
 
         <footer className="mt-12 text-center text-gray-400 text-xs">
-          PostgreSQL Views
+          PostgreSQL Views | Business Intelligence Layer
         </footer>
       </div>
     </main>

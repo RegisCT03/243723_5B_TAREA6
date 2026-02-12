@@ -1,25 +1,9 @@
-import { query } from '../../../../lib/db';
+export const dynamic = 'force-dynamic';
+import { getVentasMensuales, VentaMensual } from '../../../../lib/services/ventasM.service';
 import Link from 'next/link';
 
-export default async function VentasMensuales({ 
-  searchParams 
-}: { 
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }> 
-}) {
-  
-  await searchParams;
-  const res = await query(`
-    SELECT 
-      anio, 
-      mes, 
-      total_ordenes, 
-      ventas_totales, 
-      ticket_promedio 
-    FROM vw_ventas_mensuales 
-    ORDER BY anio DESC, mes DESC
-  `);
-
-  const data = res.rows;
+export default async function VentasMensuales() {
+  const data = await getVentasMensuales();
 
   return (
     <main className="min-h-screen bg-[#f4f1f1] p-8">
@@ -53,12 +37,14 @@ export default async function VentasMensuales({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {data.map((row: any, index: number) => (
+              {data.map((row: VentaMensual, index: number) => (
                 <tr key={index} className="hover:bg-[#fcfafa] transition-colors">
                   <td className="p-5 font-medium text-[#333333]">{row.anio}</td>
                   <td className="p-5 text-gray-700 capitalize">{row.mes}</td>
                   <td className="p-5 text-center text-gray-600">{row.total_ordenes}</td>
-                  <td className="p-5 text-center font-bold text-[#333333]">${Number(row.ventas_totales).toLocaleString()}</td>
+                  <td className="p-5 text-center font-bold text-[#333333]">
+                    ${Number(row.ventas_totales).toLocaleString()}
+                  </td>
                   <td className="p-5 text-center font-semibold text-[#632a3d] bg-[#f4f1f1]/30">
                     ${Number(row.ticket_promedio).toLocaleString()}
                   </td>
@@ -75,7 +61,7 @@ export default async function VentasMensuales({
         </div>
 
         <footer className="mt-12 text-center text-gray-400 text-xs">
-          PostgreSQL Views
+          PostgreSQL Views | Temporal Analytics Layer
         </footer>
       </div>
     </main>
