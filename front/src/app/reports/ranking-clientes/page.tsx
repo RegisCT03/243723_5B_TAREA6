@@ -1,10 +1,11 @@
-export const dynamic = 'force-dynamic';
-import { getRankingVIP, RankingCliente } from '../../../../lib/services/ranking.service';
+export const dynamic = 'force-dynamic'; 
+import { getRankingData } from '../../../../lib/services/ranking.service';
 import Link from 'next/link';
 import { z } from 'zod';
 
 const FilterSchema = z.object({
   minGasto: z.coerce.number().min(0).default(0),
+  page: z.coerce.number().min(1).default(1),
 });
 
 export default async function RankingClientes({ 
@@ -14,8 +15,12 @@ export default async function RankingClientes({
 }) {
   
   const resolvedParams = await searchParams;
-  const { minGasto } = FilterSchema.parse(resolvedParams);
-  const data = await getRankingVIP(minGasto);
+  const { minGasto, page } = FilterSchema.parse(resolvedParams);
+  const LIMIT = 4;
+  const { rows, totalCount } = await getRankingData(minGasto, page, LIMIT);
+  
+  const totalPages = Math.ceil(totalCount / LIMIT);
+  const hasMore = page < totalPages;
 
   return (
     <main className="min-h-screen bg-[#f4f1f1] p-8">
@@ -34,43 +39,47 @@ export default async function RankingClientes({
         <section className="mb-8 p-6 bg-[#632a3d] text-white rounded-lg shadow-lg border-l-8 border-[#4a1f2e]">
           <h2 className="text-lg font-bold mb-1 text-[#f4f1f1]">Insight de Negocio:</h2>
           <p className="opacity-90 leading-relaxed">
-            Este reporte utiliza funciones de ventana (RANK) para posicionar a los clientes según su rentabilidad acumulada.
+            Este reporte utiliza la Window Function <b>RANK()</b> para posicionar a los clientes según su rentabilidad acumulada[cite: 35].
           </p>
+          <div className="mt-4 p-2 bg-black/10 rounded text-xs font-mono">
+            Mostrando {rows.length} de {totalCount} registros totales.
+          </div>
         </section>
 
         <section className="mb-8 bg-white p-6 rounded-xl shadow-md border border-gray-200">
           <form method="GET" className="flex items-center gap-4">
             <div className="flex flex-col">
-              <label htmlFor="minGasto" className="text-xs font-bold text-gray-500 uppercase mb-1">Filtrar por Gasto Mínimo</label>
+              <label htmlFor="minGasto" className="text-xs font-bold text-gray-500 uppercase mb-1">Filtro Gasto Mínimo</label>
               <input 
                 type="number" 
                 id="minGasto" 
                 name="minGasto" 
                 defaultValue={minGasto}
-                className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#632a3d] focus:border-transparent outline-none text-[#333333]"
+                className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#632a3d] outline-none"
               />
             </div>
+            <input type="hidden" name="page" value="1" />
             <button 
               type="submit"
-              className="mt-5 px-6 py-2 bg-[#632a3d] text-white font-bold rounded-lg hover:bg-[#4a1f2e] transition-all shadow-md active:scale-95"
+              className="mt-5 px-6 py-2 bg-[#632a3d] text-white font-bold rounded-lg hover:bg-[#4a1f2e] transition-all"
             >
-              Aplicar Filtro
+              Filtrar
             </button>
           </form>
         </section>
 
         <div className="bg-white rounded-xl shadow-xl overflow-hidden border border-gray-200">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left">
             <thead className="bg-[#632a3d] text-[#f4f1f1]">
               <tr>
-                <th className="p-5 font-semibold uppercase text-xs tracking-wider">Posición</th>
-                <th className="p-5 font-semibold uppercase text-xs tracking-wider">ID Cliente</th>
-                <th className="p-5 font-semibold uppercase text-xs tracking-wider">Nombre del Cliente</th>
-                <th className="p-5 text-center font-semibold uppercase text-xs tracking-wider">Gasto Total</th>
+                <th className="p-5 font-semibold uppercase text-xs">Posición</th>
+                <th className="p-5 font-semibold uppercase text-xs">ID</th>
+                <th className="p-5 font-semibold uppercase text-xs">Cliente</th>
+                <th className="p-5 text-center font-semibold uppercase text-xs">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {data.map((row: RankingCliente, index: number) => (
+              {rows.map((row, index) => (
                 <tr key={row.cliente_id || index} className="hover:bg-[#fcfafa] transition-colors">
                   <td className="p-5 text-center">
                     <span className={`inline-block w-8 h-8 rounded-full leading-8 font-bold text-sm ${
@@ -88,15 +97,42 @@ export default async function RankingClientes({
               ))}
             </tbody>
           </table>
-
-          {data.length === 0 && (
-            <div className="p-10 text-center text-gray-500 italic">
-              No hay clientes que superen el gasto de ${minGasto}.
-            </div>
+          {rows.length === 0 && (
+            <div className="p-10 text-center text-gray-500 italic">No hay resultados para este filtro.</div>
           )}
         </div>
+
+        <div className="mt-8 flex items-center justify-between bg-white p-5 rounded-xl shadow-md">
+          <p className="text-sm text-gray-500">
+            Página <span className="font-bold">{page}</span> de {totalPages}
+          </p>
+          <div className="flex gap-2">
+            {page > 1 ? (
+              <Link 
+                href={`?minGasto=${minGasto}&page=${page - 1}`} 
+                className="px-6 py-2 bg-[#632a3d] text-white rounded-lg font-bold"
+              >
+                Anterior
+              </Link>
+            ) : (
+              <span className="px-6 py-2 bg-gray-200 text-gray-400 rounded-lg cursor-not-allowed">Anterior</span>
+            )}
+
+            {hasMore ? (
+              <Link 
+                href={`?minGasto=${minGasto}&page=${page + 1}`} 
+                className="px-6 py-2 bg-[#632a3d] text-white rounded-lg font-bold"
+              >
+                Siguiente
+              </Link>
+            ) : (
+              <span className="px-6 py-2 bg-gray-200 text-gray-400 rounded-lg cursor-not-allowed">Siguiente</span>
+            )}
+          </div>
+        </div>
+
         <footer className="mt-12 text-center text-gray-400 text-xs">
-          PostgreSQL Views | Advanced Analytics Layer
+          PostgreSQL Views | Seguridad por Roles [cite: 47, 111]
         </footer>
       </div>
     </main>
