@@ -68,3 +68,226 @@ docker compose down -v
 Una vez finalizado el proceso, puedes acceder a:
 - Frontend: http://localhost:3000
 - Base de Datos: Puerto 5432
+
+## Trade-offs: SQL vs Next.js
+
+### Decisiones de Arquitectura
+
+1. **Cálculos en SQL (Window Functions)**
+   - **Por qué:** `RANK() OVER` y `SUM() OVER` en PostgreSQL son más eficientes que ordenar y acumular en JS
+   - **Ventaja:** Reduce transferencia de datos entre DB y App
+   - **Trade-off:** Mayor complejidad en queries, pero mejor performance
+
+2. **GROUP BY en Views**
+   - **Por qué:** Agregar datos en la base reduce el tamaño del payload enviado a Next.js
+   - **Ventaja:** Menos datos en red nos da respuestas más rápidas
+   - **Trade-off:** Menor flexibilidad para re-agrupar datos en frontend
+
+3. **Common Table Expressions (CTE)**
+   - **Por qué:** `WITH` en `vw_ingresos_acumulados` permite separar lógica de cálculo diario del acumulado
+   - **Ventaja:** Query más legible y mantenible
+   - **Trade-off:** Puede ser más lento que JOINs en bases muy grandes (aquí no aplica)
+
+4. **Validación con Zod en Server Components**
+   - **Por qué:** Validar parámetros antes de ejecutar SQL previene inyección y errores
+   - **Ventaja:** Seguridad + UX (errores claros)
+   - **Trade-off:** Código extra en cada página con filtros
+
+5. **Paginación Server-side (LIMIT/OFFSET)**
+   - **Por qué:** Evita cargar miles de registros innecesariamente
+   - **Ventaja:** Memoria y tiempo de carga reducidos
+   - **Trade-off:** UX menos fluido que infinite scroll (pero más simple)
+
+
+## Performance Evidence
+
+### 1. Evidencia: Vista con Funciones de Ventana (Ranking VIP)
+
+**Query ejecutada:**
+```sql
+EXPLAIN (ANALYZE) 
+SELECT * FROM vw_ranking_clientes WHERE gasto_total >= 500;
+```
+
+**Resultado:**
+![alt text](image-1.png)
+
+**Explicación:**
+- El nodo WindowAgg indica el cálculo de la función RANK().
+- Justificación: El uso de índices en las llaves foráneas de las tablas base reduce el tiempo de escaneo antes de realizar el agrupamiento.
+
+### 2. Evidencia: Vista con Filtros y Paginación (Top Productos)
+
+**Query ejecutada:**
+```sql
+EXPLAIN (ANALYZE) 
+SELECT * FROM vw_top_productos LIMIT 4 OFFSET 0;
+```
+
+**Resultado:**
+![alt text](image-2.png)
+
+
+**Explicación:**
+- El nodo Limit confirma que la base de datos deja de procesar filas una vez que encuentra las primeras 4 solicitadas, ahorrando recursos.
+- Justificación: La paginación server-side previene que el servidor envíe miles de registros innecesarios al frontend, optimizando el ancho de banda y el tiempo de respuesta.
+
+## Threat Model Mínimo
+
+### Vectores de Ataque Prevenidos
+
+1. **SQL Injection**
+   - **Prevención:** Uso exclusivo de queries parametrizadas (`$1`, `$2`, `$3`)
+   - **Validación:** Zod valida tipos antes de pasar a SQL
+   - **No vulnerable:** Nunca concatenamos strings para construir SQL
+   - **Ejemplo:** `query('SELECT * FROM vw WHERE id = $1', [userId])` en vez de `` `SELECT * WHERE id = ${userId}` ``
+
+2. **Exposición de Credenciales**
+   - **Prevención:** Variables de entorno en `.env` (nunca en código)
+   - **Git:** `.env` en `.gitignore`, solo `.env.example` versionado
+   - **Separación:** `view_user` con permisos mínimos (no `postgres`)
+   - **Evidencia:** `front/lib/db.js` usa `process.env.DB_PASSWORD`
+
+3. **Privilegios Excesivos (Principle of Least Privilege)**
+   - **Usuario dedicado:** `view_user` solo tiene `SELECT` en views (no tablas)
+   - **REVOKE:** Permisos de `CREATE` revocados explícitamente
+   - **No superuser:** App no se conecta como `postgres`
+   - **Código:** Ver `db/06_roles.sql` líneas 1-17
+
+4. **Inyección via Input No Validado**
+   - **Zod schemas:** Validan `page` (número positivo) y `minGasto` (número >= 0)
+   - **Whitelist:** Solo parámetros conocidos aceptados
+   - **No vulnerable:** No hay `ORDER BY` dinámico basado en input
+   - **Ejemplo:** `PageSchema.parse()` rechaza strings maliciosos antes de SQL
+
+5. **Information Disclosure**
+   - **Views:** Frontend solo ve datos agregados, no tablas raw
+   - **Errores genéricos:** Next.js no expone stack traces de SQL en producción
+   - **Mejora posible:** Logs de errores SQL solo en server-side
+
+6. **Denial of Service (DoS) - Queries Costosas**
+   - **LIMIT:** Paginación limita resultados a 5 registros máximo (top productos) o 4 (ranking de usuarios)
+   - **Índices:** Evitan full table scans
+
+
+## Bitácora de IA
+
+#### 1. **Paginación Server-side con Zod**
+**Prompt usado:**
+> "Implementa paginación LIMIT/OFFSET en Next.js 14 App Router con validación Zod del parámetro 'page'"
+
+**Resultado generado:**
+```tsx
+const PageSchema = z.object({ page: z.coerce.number().min(1).default(1) });
+const { page } = PageSchema.parse(searchParams);
+const res = await query('SELECT * FROM view LIMIT $1 OFFSET $2', [10, (page-1)*10]);
+```
+Funcionó correctamente en localhost, pero no mostraba el total de páginas entonces agregué una query adicional con `COUNT(*)`
+
+**Corrección aplicada:**
+```tsx
+const countRes = await query('SELECT COUNT(*) FROM vw_top_productos');
+const totalCount = parseInt(countRes.rows[0].count);
+```
+
+#### 2. **Índices Estratégicos**
+**Prompt usado:**
+> "Qué índices debería crear para optimizar una view que hace JOIN entre productos y orden_detalles con GROUP BY producto_id"
+
+**Respuesta de IA:**
+- Índice en `orden_detalles.producto_id` (foreign key)
+- Índice en `ordenes.created_at` (para filtros de fecha)
+
+#### 3. **Roles**
+**Prompt usado:**
+> "Cómo crear un rol en postgresql con permisos minimos"
+
+**Respuesta de IA:**
+```sql
+-- 1. Crear el usuario con contraseña
+CREATE ROLE analista_ventas WITH 
+    LOGIN 
+    PASSWORD 'contraseña_segura_123'
+    NOSUPERUSER    -- No es Dios
+    NOCREATEDB     -- No puede crear bases de datos
+    NOCREATEROLE   -- No puede crear otros usuarios
+    NOINHERIT;     -- No hereda permisos automáticamente (seguridad extra)
+-- 2. Permitirle conectarse a la base de datos específica
+GRANT CONNECT ON DATABASE mi_ecommerce TO analista_ventas;
+-- 3. Permitir "usar" el esquema public (entrar al pasillo)
+GRANT USAGE ON SCHEMA public TO analista_ventas;
+-- 4. Dar permiso SOLO de lectura (SELECT) en tablas específicas
+GRANT SELECT ON TABLE ordenes, orden_detalles, productos, categorias TO analista_ventas;
+
+-- IMPORTANTE: NO le damos permiso sobre la tabla 'usuarios'
+-- Si intenta: SELECT * FROM usuarios; -> Recibirá "Permission denied"
+```
+Aquí utilice este pedazo que me dio de ejemplo para poder crear mi usuario con permisos a las vistas 
+
+#### 4. **CTE**
+**Prompt usado:**
+> Qué es un CTE
+
+**Respuesta de IA:**
+- **¿Qué es?**
+Imagina que estás resolviendo un problema matemático complejo. En lugar de hacer todo el cálculo en una sola línea mental, escribes resultados intermedios en una hoja de papel aparte para usarlos después.
+Un CTE es esa "hoja de papel". Es una tabla temporal que creas al inicio de tu consulta, le pones un nombre, y la usas como si fuera una tabla real dentro de tu SELECT principal. Solo existe mientras dura la ejecución de esa consulta.
+
+- **¿Para qué sirve?**
+- Legibilidad: Evita los "nidos de espagueti" (subconsultas dentro de subconsultas dentro de subconsultas).
+- Organización: Te permite romper un problema grande en pasos pequeños (Paso 1, Paso 2, Resultado).
+
+Ejemplo Práctico:
+
+```sql
+-- Paso 1: Calculamos cuánto gastó cada usuario (La hoja de papel)
+WITH GastosPorUsuario AS (
+    SELECT usuario_id, SUM(total) as total_gastado
+    FROM ordenes
+    GROUP BY usuario_id
+)
+
+-- Paso 2: Usamos ese resultado para filtrar y poner nombres bonitos
+SELECT u.nombre, g.total_gastado
+FROM usuarios u
+JOIN GastosPorUsuario g ON u.id = g.usuario_id -- ¡Aquí usamos el CTE!
+WHERE g.total_gastado > 1000;
+```
+
+#### 5. **Window Functions**
+**Prompt usado:**
+> Qué es una Window Function
+
+**Respuesta de IA:**
+- **¿Qué son?**
+Esta es la parte donde muchos se confunden con el GROUP BY.
+- GROUP BY: Toma 10 filas y las aplasta en 1 sola fila resumen (pierdes el detalle individual).
+- Window Function: Toma 10 filas, mantiene las 10 filas, pero agrega una columna extra con un cálculo basado en un grupo (ventana) de datos.
+
+- **Palabras Clave:**
+- OVER (...): Esto activa la función de ventana. Le dice a SQL: "No agrupes las filas, solo mira a través de esta ventana".
+- PARTITION BY: Es como el GROUP BY pero solo para esa columna específica. Define "la ventana".
+- ORDER BY: Define el orden dentro de esa ventana (crucial para rankings).
+
+Ejemplo Práctico
+
+```sql
+SELECT 
+    nombre AS producto,
+    categoria_id,
+    precio,
+    -- Aquí viene la magia:
+    AVG(precio) OVER (PARTITION BY categoria_id) as precio_promedio_categoria
+FROM productos;
+```
+
+#### 6. **CSS**
+**Prompt usado:**
+> De acuerdo a esta paleta de colores (se anexó paleta de colores) ayudame a darle css a mis vistas, no cambies nada de la lógica que lleva, solo dale css puro
+
+**Respuesta de IA:**
+El CSS de las vistas.
+
+### Resumen de Uso de IA
+- **Total de prompts:** 6
+- **Tiempo ahorrado estimado:** ~3 horas (entre investigación y escribir)
