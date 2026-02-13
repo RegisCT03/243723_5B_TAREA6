@@ -66,5 +66,5 @@ docker compose up -d
 docker compose down -v
 ```
 Una vez finalizado el proceso, puedes acceder a:
-Frontend: http://localhost:3000
-Base de Datos: Puerto 5432
+- Frontend: http://localhost:3000
+- Base de Datos: Puerto 5432
