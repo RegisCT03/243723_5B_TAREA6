@@ -13,7 +13,7 @@ SELECT
     SUM(od.cantidad) AS unidades_vendidas,
     SUM(od.subtotal) AS ventas_totales,
     CASE 
-        WHEN SUM(od.subtotal) > 1000 THEN 'Producto Estrella'
+        WHEN SUM(od.subtotal) > 1000 OR (RANK() OVER (ORDER BY SUM(od.cantidad) DESC) <= 3 AND SUM(od.cantidad) >= 5) THEN 'Producto Estrella'
         ELSE 'Venta Regular'
     END AS categoria_exito,
     SUM(od.subtotal) / NULLIF(SUM(od.cantidad), 0) AS precio_promedio
@@ -104,6 +104,12 @@ FROM usuarios u
 JOIN ordenes o ON o.usuario_id = u.id 
 GROUP BY u.id, u.nombre
 HAVING SUM(o.total) > 0;
+
+-- VERIFY 1: Ver los 5 clientes con mayor gasto
+-- SELECT cliente_id, gasto_total, ranking FROM vw_ranking_clientes ORDER BY ranking LIMIT 5;
+-- VERIFY 2: Comparar suma de gasto_total con tabla ordenes
+-- SELECT SUM(gasto_total) FROM vw_ranking_clientes; 
+-- SELECT SUM(total) FROM ordenes;
 ------------------------------------------------------------
 
 -- View: Ingresos diarios acumulados
@@ -127,3 +133,7 @@ SELECT
     ingresos_dia,
     SUM(ingresos_dia) OVER (ORDER BY fecha) AS ingresos_acumulados 
     FROM ingresos_por_dia;
+
+-- VERIFY 1: Último valor acumulado debe ser igual al total histórico
+-- SELECT ingresos_acumulados FROM vw_ingresos_acumulados ORDER BY fecha DESC LIMIT 1;
+-- SELECT SUM(total) FROM ordenes;
