@@ -2,6 +2,13 @@
 
 Este proyecto implementa PostgreSQL + Views + NextJs + DockerCompose. La arquitectura se basa en un entorno de contenedores en **Docker** con **Next.js** y **PostgreSQL**, priorizando la optimización de consultas y la seguridad de los datos.
 
+## Stack 
+- Framework: Next.js (App Router).
+- Base de Datos: PostgreSQL (utilizando pg para consultas directas).
+- Validación: Zod para searchParams.
+- Estilos: CSS
+- Docker: Tanto web como la BD estan en contenedores, para que ambos se construyan mediante docker compose up -d 
+
 ## Indexes
 Se implementaron índices estratégicos en el archivo 04_indexes.sql para optimizar el rendimiento del motor de base de datos, se crearon índices en llaves foráneas para acelerar los JOINs entre tablas de gran tamaño, se utilizo IF NOT EXISTS para garantizar que la inicialización del contenedor no se interrumpa si el índice ya fue creado por el esquema base.
 
